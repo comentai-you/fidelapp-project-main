@@ -1,7 +1,6 @@
 // app/auth.tsx
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +18,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmail, signOut, signUpWithEmail } from '@/lib/auth';
 import { useSession } from '@/state/session';
 
+/** 🔧 Fundo opaco evita “escurecimento” visual por trás (Android/overlays) */
+const BG = '#ffffff';
+
 /** ✅ Componente de Input fora do componente principal (não remonta a cada render) */
 type KeyboardType = 'default' | 'email-address' | 'numeric' | 'phone-pad';
 type InputProps = {
@@ -28,6 +30,9 @@ type InputProps = {
   secure?: boolean;
   keyboardType?: KeyboardType;
   autoFocus?: boolean;
+  // permite passar ref no email (opcional)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  inputRef?: any;
 };
 const InputField: React.FC<InputProps> = ({
   value,
@@ -36,8 +41,10 @@ const InputField: React.FC<InputProps> = ({
   secure = false,
   keyboardType = 'default',
   autoFocus = false,
+  inputRef,
 }) => (
   <TextInput
+    ref={inputRef}
     value={value}
     onChangeText={onChangeText}
     placeholder={placeholder}
@@ -53,11 +60,66 @@ const InputField: React.FC<InputProps> = ({
       borderWidth: 1,
       borderColor: 'rgba(0,0,0,0.15)',
       borderRadius: 12,
-      backgroundColor: '#fff',
+      backgroundColor: BG, // 👈 garante campo opaco
     }}
     placeholderTextColor="rgba(0,0,0,0.35)"
+    // ajudinhas pro SO tratar como senha quando secure=true
+    textContentType={secure ? 'password' : 'none'}
+    autoComplete={secure ? 'password' : 'off'}
   />
 );
+
+/** 🔐 Campo de senha com botão “mostrar/ocultar” */
+const PasswordInput = ({
+  value,
+  onChangeText,
+  placeholder,
+}: {
+  value: string;
+  onChangeText: (t: string) => void;
+  placeholder: string;
+}) => {
+  const [hidden, setHidden] = useState(true);
+  return (
+    <View style={{ position: 'relative', justifyContent: 'center' }}>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        secureTextEntry={hidden} // 👈 mostra os • quando oculto
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        autoComplete="password"
+        style={{
+          paddingVertical: 12,
+          paddingHorizontal: 14,
+          paddingRight: 44, // espaço pro botão do “olho”
+          borderWidth: 1,
+          borderColor: 'rgba(0,0,0,0.15)',
+          borderRadius: 12,
+          backgroundColor: BG, // 👈 garante campo opaco
+        }}
+        placeholderTextColor="rgba(0,0,0,0.35)"
+      />
+
+      <Pressable
+        onPress={() => setHidden((v) => !v)}
+        style={{
+          position: 'absolute',
+          right: 8,
+          height: '100%',
+          justifyContent: 'center',
+          paddingHorizontal: 8,
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={hidden ? 'Mostrar senha' : 'Ocultar senha'}
+      >
+        <Text style={{ opacity: 0.7 }}>{hidden ? '👁️' : '🙈'}</Text>
+      </Pressable>
+    </View>
+  );
+};
 
 /** 🔎 Regras visuais da senha (tempo real) */
 function PasswordRules({ password }: { password: string }) {
@@ -95,20 +157,28 @@ export default function AuthScreen() {
   const emailRef = useRef<TextInput>(null);
 
   // 🔔 Deep link fidelapp://auth (confirmação de e-mail)
+  // Evita múltiplos Alerts que deixam a tela “escura” ao encadear diálogos
+  const handledAuthRef = useRef(false);
+
   useEffect(() => {
+    const showOnce = () => {
+      if (handledAuthRef.current) return;
+      handledAuthRef.current = true;
+      Alert.alert('Tudo certo!', 'E-mail confirmado. Agora é só entrar com sua senha.');
+      setMode('signin');
+    };
+
     const checkInitial = async () => {
       const url = await Linking.getInitialURL();
       if (url && url.includes('/auth')) {
-        Alert.alert('Tudo certo!', 'E-mail confirmado. Agora é só entrar com sua senha.');
-        setMode('signin');
+        showOnce();
       }
     };
     checkInitial();
 
     const sub = Linking.addEventListener('url', ({ url }) => {
       if (url.includes('/auth')) {
-        Alert.alert('Tudo certo!', 'E-mail confirmado. Agora é só entrar com sua senha.');
-        setMode('signin');
+        showOnce();
       }
     });
     return () => sub.remove();
@@ -182,14 +252,19 @@ export default function AuthScreen() {
   // ✅ Já logado
   if (session) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
         <KeyboardAvoidingView
           behavior={Platform.select({ ios: 'padding', android: undefined })}
-          style={{ flex: 1 }}
+          style={{ flex: 1, backgroundColor: BG }}
         >
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center', gap: 16, backgroundColor: '#fff' }}
+            contentContainerStyle={{
+              flexGrow: 1,
+              padding: 20,
+              justifyContent: 'center',
+              gap: 16,
+            }}
+            style={{ flex: 1, backgroundColor: BG }} // 👈 evita “escurecimento”
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="none"
           >
@@ -218,14 +293,19 @@ export default function AuthScreen() {
 
   // 🔐 Formulário
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-      <StatusBar style="dark" backgroundColor="#ffffff" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: 'padding', android: undefined })}
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: BG }}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center', gap: 16, backgroundColor: '#fff' }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            padding: 20,
+            justifyContent: 'center',
+            gap: 16,
+          }}
+          style={{ flex: 1, backgroundColor: BG }} // 👈 evita “escurecimento”
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
         >
@@ -240,15 +320,16 @@ export default function AuthScreen() {
               placeholder="seu@email.com"
               keyboardType="email-address"
               autoFocus
-              // @ts-ignore: RN types don't expose ref on our wrapper - fine.
-              ref={emailRef}
+              inputRef={emailRef}
             />
-            <InputField
+
+            {/* 👇 Campo de senha com olho */}
+            <PasswordInput
               value={password}
               onChangeText={setPassword}
               placeholder="Senha (mín. 6, 1 maiús., 1 número)"
-              secure
             />
+
             {/* Mostra as regras somente no modo de cadastro */}
             {mode === 'signup' ? <PasswordRules password={password} /> : null}
           </View>

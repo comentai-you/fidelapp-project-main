@@ -1,4 +1,4 @@
-package com.fidelapp.fidelapp
+package com.seu.dominio.fidelapp
 
 import android.app.Application
 import android.content.res.Configuration

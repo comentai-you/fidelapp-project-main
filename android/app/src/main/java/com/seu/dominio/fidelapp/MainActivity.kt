@@ -1,4 +1,4 @@
-package com.fidelapp.fidelapp
+package com.seu.dominio.fidelapp
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
