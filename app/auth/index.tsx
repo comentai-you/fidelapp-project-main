@@ -1,6 +1,7 @@
 // app/auth.tsx
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -52,6 +53,7 @@ const InputField: React.FC<InputProps> = ({
       borderWidth: 1,
       borderColor: 'rgba(0,0,0,0.15)',
       borderRadius: 12,
+      backgroundColor: '#fff',
     }}
     placeholderTextColor="rgba(0,0,0,0.35)"
   />
@@ -180,13 +182,14 @@ export default function AuthScreen() {
   // ✅ Já logado
   if (session) {
     return (
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <StatusBar style="dark" backgroundColor="#ffffff" />
         <KeyboardAvoidingView
           behavior={Platform.select({ ios: 'padding', android: undefined })}
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center', gap: 16 }}
+            contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center', gap: 16, backgroundColor: '#fff' }}
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="none"
           >
@@ -215,13 +218,14 @@ export default function AuthScreen() {
 
   // 🔐 Formulário
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <StatusBar style="dark" backgroundColor="#ffffff" />
       <KeyboardAvoidingView
         behavior={Platform.select({ ios: 'padding', android: undefined })}
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center', gap: 16 }}
+          contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center', gap: 16, backgroundColor: '#fff' }}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
         >

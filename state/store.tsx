@@ -23,7 +23,7 @@ export type LoyaltyProgram = {
 export type Customer = {
   id: string;
   name: string;
-  phone: string;
+  phone: string; // pode estar formatado; usamos normalize para comparar/salvar
   stamps: number;
   programId: string;
 };
@@ -71,6 +71,54 @@ function deriveLimits(plan: PlanId): Limits {
   return { maxPrograms: base.programs, maxCustomersPerProgram: base.customers };
 }
 
+/** 🔢 Telefone (BR): helpers */
+function stripDigits(v: string) {
+  return (v || '').replace(/\D+/g, '');
+}
+
+/** Normaliza: remove +55/0055/055, remove zero à esquerda do DDD e mantém até 11 dígitos finais */
+export function normalizePhone(raw: string) {
+  let d = stripDigits(raw);
+
+  // remove prefixos do Brasil
+  if (d.startsWith('0055')) d = d.slice(4);
+  else if (d.startsWith('055')) d = d.slice(3);
+  else if (d.startsWith('55')) d = d.slice(2);
+
+  // remove zero à esquerda do DDD (ex.: 061 -> 61)
+  if (d.length >= 2 && d[0] === '0') d = d.slice(1);
+
+  // guarda no máximo 11 (DDD + 9) — se vier maior, mantém os últimos 11
+  if (d.length > 11) d = d.slice(-11);
+
+  return d;
+}
+
+/** Validação BR: 10 dígitos (fixo) ou 11 (celular com 9 no 3º dígito) e DDD válido */
+export function isValidBRPhone(raw: string) {
+  const d = normalizePhone(raw);
+  if (d.length !== 10 && d.length !== 11) return false;
+
+  const ddd = d.slice(0, 2);
+  if (ddd[0] === '0') return false;
+
+  if (d.length === 11 && d[2] !== '9') return false;
+
+  return true;
+}
+
+/** Formatação visual (xx) 9xxxx-xxxx ou (xx) xxxx-xxxx */
+export function formatBRPhone(raw: string) {
+  const d = normalizePhone(raw);
+  if (d.length <= 2) return `(${d}`;
+  const ddd = d.slice(0, 2);
+  if (d.length <= 6) return `(${ddd}) ${d.slice(2)}`;
+  if (d.length === 10) {
+    return `(${ddd}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  }
+  return `(${ddd}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
 const initialState: State = {
   programs: [],
   customers: [],
@@ -96,7 +144,7 @@ type Action =
   | { type: 'ADD_STAMP'; id: string }
   | { type: 'RESET_CUSTOMER'; id: string }
   | { type: 'APPEND_REDEMPTION'; payload: Redemption }
-  | { type: 'SET_PLAN'; plan: PlanId } // mantido p/ compat, mas preferir SET_PLAN_AND_LIMITS
+  | { type: 'SET_PLAN'; plan: PlanId } // compat (prefira SET_PLAN_AND_LIMITS)
   | { type: 'SET_PLAN_AND_LIMITS'; plan: PlanId; limits: Limits }
   | { type: 'UPDATE_PROFILE'; payload: Partial<Profile> }
   | { type: 'RESET_STORE' };
@@ -165,8 +213,7 @@ function reducer(state: State, action: Action): State {
       return { ...state, redemptions: [action.payload, ...state.redemptions] };
 
     case 'SET_PLAN':
-      // compat: ajusta só o plan; limites permanecem (não recomendado)
-      return { ...state, plan: action.plan };
+      return { ...state, plan: action.plan }; // limites mantidos (uso legado)
 
     case 'SET_PLAN_AND_LIMITS':
       return { ...state, plan: action.plan, limits: action.limits };
@@ -198,12 +245,6 @@ const StoreContext = createContext<{
   updateProfile: (patch: Partial<Profile>) => void;
   resetStore: () => void;
 }>({} as any);
-
-/** 🔢 util: normaliza telefone p/ 11 dígitos (DDD + 9) */
-function normalizePhone(phone: string) {
-  const only = (phone || '').replace(/\D+/g, '');
-  return only;
-}
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -340,19 +381,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // ✅ bloqueio de telefone duplicado dentro do mesmo programa
+      // ✅ telefone válido (aceita 10 fixo ou 11 celular BR)
+      if (!isValidBRPhone(c.phone)) {
+        alert('Telefone inválido. Use DDD + número (ex.: (61) 98110-1086).');
+        return;
+      }
+
+      // ✅ bloqueio de telefone duplicado dentro do mesmo programa (comparando dígitos)
       const normalizedNew = normalizePhone(c.phone);
       const duplicate = programCustomers.some(
         (x) => normalizePhone(x.phone) === normalizedNew
       );
       if (duplicate) {
         alert('Este telefone já está cadastrado neste cartão.');
-        return;
-      }
-
-      // (opcional) validação simples de formato (DDD+9 = 11 dígitos)
-      if (normalizedNew.length !== 11) {
-        alert('Telefone inválido. Use DDD + 9 dígitos (ex.: 11999999999).');
         return;
       }
 
@@ -367,7 +408,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                 id: newCustomer.id,
                 program_id: newCustomer.programId,
                 name: newCustomer.name,
-                phone: newCustomer.phone,
+                phone: newCustomer.phone, // salvar como digitado (ou normalize se preferir)
                 stamps: 0,
               },
             ],
@@ -418,7 +459,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const removeCustomer = (id: string) => {
       dispatch({ type: 'REMOVE_CUSTOMER', id });
       (async () => {
-        try {
+               try {
           await supabase.from('customers').delete().eq('id', id);
         } catch (e) {
           console.log('delete customer error', e);
@@ -484,7 +525,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     /** ⚙️ setters */
     const setPlan = (plan: PlanId) => {
-      // compat: mantém, mas já atualiza limites juntos
       const limits = deriveLimits(plan);
       dispatch({ type: 'SET_PLAN_AND_LIMITS', plan, limits });
     };
