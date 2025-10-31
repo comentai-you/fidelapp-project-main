@@ -1,7 +1,7 @@
 // app/(tabs)/menu.tsx
-import { Header } from '@/components/ui/Header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Header } from '@/components/ui/Header';
 import { theme } from '@/components/ui/theme';
 import { signOut } from '@/lib/auth';
 import { supabase } from '@/lib/supabaseClient'; // ✅ para fechar canais no sign out
@@ -13,6 +13,12 @@ import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ troca p/ safe-area-context
+
+// 🔗 CORRIGIDO: use o alias do projeto
+import { PRIVACY_URL, TERMS_URL } from './constants/legal';
+
+// 👇 NOVO: seletor para regra de anúncios (free-only)
+import { shouldShowAds } from '@/state/store';
 
 const BUSINESS_TYPES = [
   'Barbearia','Salão de Beleza','Cafeteria','Padaria','Restaurante','Pizzaria','Hamburgueria',
@@ -47,6 +53,9 @@ export default function MenuScreen() {
   );
   const [editing, setEditing] = useState(!isProfileComplete);
 
+  // 👇 NOVO: decide se mostra anúncios neste screen (plano freemium)
+  const showAds = shouldShowAds(state.plan);
+
   function save() {
     updateProfile({ ownerName, storeName, phone, email, businessType });
     Alert.alert('Pronto!', 'Seu perfil foi atualizado.');
@@ -63,29 +72,27 @@ export default function MenuScreen() {
     router.replace('/onboarding' as never);
   }
 
- async function handleSignOut() {
-  try {
-    setSigningOut(true);
-
-    // Fecha canais Realtime (opcional)
+  async function handleSignOut() {
     try {
-      supabase.getChannels().forEach((ch) => supabase.removeChannel(ch));
-    } catch {}
+      setSigningOut(true);
 
-    await signOut();
+      // Fecha canais Realtime (opcional)
+      try {
+        supabase.getChannels().forEach((ch) => supabase.removeChannel(ch));
+      } catch {}
 
-    Alert.alert('Saiu da conta', 'Você desconectou com sucesso.');
+      await signOut();
 
-    // Não navegue aqui; o guard global redireciona para /auth
-    // (app/_layout.tsx faz <Redirect href="/auth" /> quando !session)
-  } catch (e: any) {
-    Alert.alert('Erro ao sair', e?.message ?? 'Tente novamente.');
-  } finally {
-    setSigningOut(false);
+      Alert.alert('Saiu da conta', 'Você desconectou com sucesso.');
+
+      // Não navegue aqui; o guard global redireciona para /auth
+      // (app/_layout.tsx faz <Redirect href="/auth" /> quando !session)
+    } catch (e: any) {
+      Alert.alert('Erro ao sair', e?.message ?? 'Tente novamente.');
+    } finally {
+      setSigningOut(false);
+    }
   }
-}
-
-
 
   const ProfileView = useMemo(() => (
     <View>
@@ -235,11 +242,28 @@ export default function MenuScreen() {
           <Text style={s.sectionTitle}>Planos & Legal</Text>
           <View style={{ gap: 8 }}>
             <Button title="Planos" onPress={() => router.push('/plans' as never)} />
-            <Button variant="ghost" title="Termos de Uso" onPress={() => router.push('/terms' as never)} />
-            <Button variant="ghost" title="Política de Privacidade" onPress={() => router.push('/privacy' as never)} />
+            <Button variant="ghost" title="Termos de Uso" onPress={() => Linking.openURL(TERMS_URL)} />
+            <Button variant="ghost" title="Política de Privacidade" onPress={() => Linking.openURL(PRIVACY_URL)} />
             <Button variant="outline" title="Ver Onboarding novamente" onPress={viewOnboardingAgain} />
           </View>
         </Card>
+
+        {/* 👇 NOVO: placeholder do banner de anúncio (apenas no plano freemium) */}
+        {showAds && (
+          <View style={{
+            height: 60,
+            backgroundColor: '#eef6ff',
+            borderTopWidth: 1,
+            borderColor: '#dbeafe',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 8,
+          }}>
+            <Text style={{ color: '#2563eb', fontWeight: '700' }}>
+              Espaço para anúncio (somente no plano gratuito)
+            </Text>
+          </View>
+        )}
 
         <Text style={s.version}>Versão 1.0.0 • FideLApp</Text>
         <View style={{ height: 60 }} />

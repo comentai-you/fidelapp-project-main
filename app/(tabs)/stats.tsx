@@ -6,6 +6,8 @@ import { useStore } from '@/state/store';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+// 👇 NOVO: regra de exibição de anúncios (somente plano freemium)
+import { shouldShowAds } from '@/state/store';
 
 export default function StatsScreen() {
   const { state } = useStore();
@@ -36,11 +38,21 @@ export default function StatsScreen() {
     Animated.timing(rotate, { toValue: pct, duration: 800, useNativeDriver: false }).start();
   }, [pct, rotate]);
 
+  // 👇 NOVO: decide se mostra anúncios nesta tela
+  const showAds = shouldShowAds(state.plan);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <Header title="Estatísticas" subtitle="Resumo do seu desempenho" />
 
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={{
+          ...s.content,
+          // 👇 mais espaço quando o banner está visível
+          paddingBottom: showAds ? 150 : 80,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.kpiRow}>
           <Card style={s.kpiCard}>
             <Text style={s.kpiTitle}>Clientes ativos</Text>
@@ -115,6 +127,15 @@ export default function StatsScreen() {
               })}
           </Card>
         )}
+
+        {/* 👇 NOVO: placeholder do banner de anúncio (somente no freemium) */}
+        {showAds && (
+          <View style={s.adBanner}>
+            <Text style={{ color: '#2563eb', fontWeight: '700' }}>
+              Espaço para anúncio (somente no plano gratuito)
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -142,4 +163,16 @@ const s = StyleSheet.create({
   barMeterBG: { backgroundColor: theme.colors.primary + '33', borderRadius: 10, height: 10, width: 130, overflow: 'hidden' },
   barMeterFG: { backgroundColor: theme.colors.primary, height: 10 },
   barValue: { color: theme.colors.text, width: 30, textAlign: 'right' as const },
+
+  // 👇 NOVO: estilo do banner placeholder
+  adBanner: {
+    height: 60,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
 });

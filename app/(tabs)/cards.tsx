@@ -12,6 +12,8 @@ import { theme } from '@/components/ui/theme';
 import type { LoyaltyProgram } from '@/state/store';
 import { useStore } from '@/state/store';
 
+// 👇 NOVO: regra única para exibir anúncios (somente no plano freemium)
+import { shouldShowAds } from '@/state/store';
 
 /** Capas disponíveis (keys em minúsculas, sem acento/espaço) */
 const coverMap = {
@@ -62,6 +64,9 @@ export default function CardsScreen() {
   const { state } = useStore();
   const programs = useMemo(() => state.programs, [state.programs]);
 
+  // 👇 NOVO: decide se exibe o banner de anúncio nesta tela
+  const showAds = shouldShowAds(state.plan);
+
   return (
     <Page>
       <Header title="Cartões" subtitle="Gerencie seus programas de fidelidade" />
@@ -69,7 +74,12 @@ export default function CardsScreen() {
       <FlatList<LoyaltyProgram>
         data={programs}
         keyExtractor={(p) => p.id}
-        contentContainerStyle={{ padding: theme.space.lg, paddingBottom: 160 }}
+        // 👇 AJUSTE: aumenta o padding inferior quando houver banner,
+        // para não ficar encoberto pela ctaBar absoluta
+        contentContainerStyle={{
+          padding: theme.space.lg,
+          paddingBottom: showAds ? 230 : 160,
+        }}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <UICard elevated style={styles.emptyCard}>
@@ -88,6 +98,16 @@ export default function CardsScreen() {
               />
             </UICard>
           </View>
+        }
+        // 👇 NOVO: banner placeholder como rodapé da lista (rola junto)
+        ListFooterComponent={
+          showAds ? (
+            <View style={styles.adBanner}>
+              <Text style={{ color: '#2563eb', fontWeight: '700' }}>
+                Espaço para anúncio (somente no plano gratuito)
+              </Text>
+            </View>
+          ) : null
         }
         renderItem={({ item }) => {
           const src = getCoverSrc(item.cover);
@@ -127,9 +147,7 @@ export default function CardsScreen() {
             router.push('/program/new');
           }}
         />
-
-        {/* 👇 Adicione exatamente aqui, fora da FlatList, antes de fechar o <Page> */}
-      {__DEV__ && <DevBadge />}
+        {__DEV__ && <DevBadge />}
       </View>
     </Page>
   );
@@ -153,6 +171,18 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 6, color: theme.colors.text, fontSize: theme.font.body, textAlign: 'center',
+  },
+
+  // 👇 NOVO: estilo do banner placeholder
+  adBanner: {
+    height: 60,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: theme.space.md,
   },
 
   ctaBar: {

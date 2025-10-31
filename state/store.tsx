@@ -71,6 +71,27 @@ function deriveLimits(plan: PlanId): Limits {
   return { maxPrograms: base.programs, maxCustomersPerProgram: base.customers };
 }
 
+/** 🧮 Selector de limites “puros” do plano (sem overrides) */
+export function getLimitsBase(plan: PlanId): Limits {
+  return deriveLimits(plan);
+}
+
+/** ✅ Selector de limites efetivos (com overrides vindos do Supabase) */
+export function selectLimits(state: State): Limits {
+  return state.limits; // já consolidado via forceReloadUser()
+}
+
+/** 📺 Regra única: quando exibir anúncios */
+export function shouldShowAds(plan: PlanId): boolean {
+  return plan === 'freemium'; // anúncios apenas no gratuito
+}
+
+/** 🏷️ (Opcional útil) Selector do plano atual */
+export function selectPlan(state: State): PlanId {
+  return state.plan;
+}
+
+
 /** 🔢 Telefone (BR): helpers */
 function stripDigits(v: string) {
   return (v || '').replace(/\D+/g, '');

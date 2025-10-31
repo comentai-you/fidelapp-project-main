@@ -20,6 +20,7 @@
       "bundleIdentifier": "com.seu.dominio.fidelapp"
     },
     "android": {
+      "googleMobileAdsAppId": "ca-app-pub-3940256099942544~3347511713", 
       "package": "com.seu.dominio.fidelapp",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
