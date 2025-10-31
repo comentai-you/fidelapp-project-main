@@ -3,7 +3,7 @@ import { useRootNavigationState, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { FlatList, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { DevBadge } from '@/components/DevBadge';
+
 import { Page } from '@/components/layout/Page';
 import { Header } from '@/components/ui/Header';
 import { Button } from '@/components/ui/button';
@@ -147,7 +147,6 @@ export default function CardsScreen() {
             router.push('/program/new');
           }}
         />
-        {__DEV__ && <DevBadge />}
       </View>
     </Page>
   );
