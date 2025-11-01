@@ -15,7 +15,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ troca p/ safe-area-context
 
 // 🔗 CORRIGIDO: use o alias do projeto
-import { PRIVACY_URL, TERMS_URL } from './constants/legal';
+import { PRIVACY_URL, TERMS_URL } from '../constants/legal';
 
 // 👇 NOVO: seletor para regra de anúncios (free-only)
 import { shouldShowAds } from '@/state/store';
