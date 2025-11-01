@@ -31,6 +31,8 @@ import { useStore } from '@/state/store';
 // utils
 const onlyDigits = (s: string) => (s || '').replace(/\D/g, '');
 const circles = (n: number) => Array.from({ length: n }, (_, i) => i);
+const FOOTER_H = 92; // altura aproximada do rodapé com os 2 botões
+
 
 function useSheetAnim(isOpen: boolean) {
   const anim = useRef(new Animated.Value(0)).current;
@@ -518,7 +520,8 @@ export default function ProgramDetail() {
         <FlatList
           data={customers}
           keyExtractor={(c) => c.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 220 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: FOOTER_H + safeBottom, // evita o overlap e NÃO rola com a lista
+}}
           // 👇 separador entre cards (resolve “colado”)
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           ListHeaderComponent={
@@ -905,7 +908,15 @@ export default function ProgramDetail() {
 const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   actionCol: { flexBasis: '48%', flexGrow: 1 },
-  fabs: { position: 'absolute', left: 16, right: 16, flexDirection: 'row' },
+  fabs: {
+  position: 'absolute',
+  left: 16,
+  right: 16,
+  // o bottom já vem dinâmico pelo estilo inline: { bottom: safeBottom }
+  flexDirection: 'row',
+  zIndex: 100,        // iOS
+  elevation: 20,      // Android
+},
   sheet: {
     position: 'absolute',
     left: 16,
