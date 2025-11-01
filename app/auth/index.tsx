@@ -15,13 +15,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// ✅ NEW: armazenamento seguro/assíncrono
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ NEW
+import * as SecureStore from 'expo-secure-store'; // ✅ NEW
+
 import { signInWithEmail, signOut, signUpWithEmail } from '@/lib/auth';
 import { useSession } from '@/state/session';
 
 /** 🔧 Fundo opaco evita “escurecimento” visual por trás (Android/overlays) */
 const BG = '#ffffff';
 
-/** ✅ Componente de Input fora do componente principal (não remonta a cada render) */
+// ✅ NEW: chaves de persistência
+const KEY_REMEMBER = 'auth_remember'; // '1' | '0'
+const KEY_EMAIL = 'auth_email';
+const KEY_PASSWORD = 'auth_password';
+
 type KeyboardType = 'default' | 'email-address' | 'numeric' | 'phone-pad';
 type InputProps = {
   value: string;
@@ -30,7 +38,6 @@ type InputProps = {
   secure?: boolean;
   keyboardType?: KeyboardType;
   autoFocus?: boolean;
-  // permite passar ref no email (opcional)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputRef?: any;
 };
@@ -60,10 +67,9 @@ const InputField: React.FC<InputProps> = ({
       borderWidth: 1,
       borderColor: 'rgba(0,0,0,0.15)',
       borderRadius: 12,
-      backgroundColor: BG, // 👈 garante campo opaco
+      backgroundColor: BG,
     }}
     placeholderTextColor="rgba(0,0,0,0.35)"
-    // ajudinhas pro SO tratar como senha quando secure=true
     textContentType={secure ? 'password' : 'none'}
     autoComplete={secure ? 'password' : 'off'}
   />
@@ -86,7 +92,7 @@ const PasswordInput = ({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        secureTextEntry={hidden} // 👈 mostra os • quando oculto
+        secureTextEntry={hidden}
         autoCapitalize="none"
         autoCorrect={false}
         textContentType="password"
@@ -94,11 +100,11 @@ const PasswordInput = ({
         style={{
           paddingVertical: 12,
           paddingHorizontal: 14,
-          paddingRight: 44, // espaço pro botão do “olho”
+          paddingRight: 44,
           borderWidth: 1,
           borderColor: 'rgba(0,0,0,0.15)',
           borderRadius: 12,
-          backgroundColor: BG, // 👈 garante campo opaco
+          backgroundColor: BG,
         }}
         placeholderTextColor="rgba(0,0,0,0.35)"
       />
@@ -121,7 +127,6 @@ const PasswordInput = ({
   );
 };
 
-/** 🔎 Regras visuais da senha (tempo real) */
 function PasswordRules({ password }: { password: string }) {
   const hasLen = password.length >= 6;
   const hasUpper = /[A-Z]/.test(password);
@@ -153,11 +158,12 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // refs para focar após trocar de modo
+  // ✅ NEW: lembrar dados
+  const [remember, setRemember] = useState(true); // ligado por padrão (ajuste se quiser)
+
   const emailRef = useRef<TextInput>(null);
 
   // 🔔 Deep link fidelapp://auth (confirmação de e-mail)
-  // Evita múltiplos Alerts que deixam a tela “escura” ao encadear diálogos
   const handledAuthRef = useRef(false);
 
   useEffect(() => {
@@ -184,14 +190,50 @@ export default function AuthScreen() {
     return () => sub.remove();
   }, []);
 
+  // ✅ NEW: carregar credenciais salvas
+  useEffect(() => {
+    (async () => {
+      try {
+        const [r, savedEmail, savedPass] = await Promise.all([
+          AsyncStorage.getItem(KEY_REMEMBER),
+          AsyncStorage.getItem(KEY_EMAIL),
+          SecureStore.getItemAsync(KEY_PASSWORD),
+        ]);
+        const on = r === '1';
+        setRemember(on);
+        if (on) {
+          if (savedEmail) setEmail(savedEmail);
+          if (savedPass) setPassword(savedPass);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // ✅ NEW: salvar/limpar de acordo com a escolha
+  async function persistChoice(rememberOn: boolean, e: string, p: string) {
+    try {
+      if (rememberOn) {
+        await Promise.all([
+          AsyncStorage.setItem(KEY_REMEMBER, '1'),
+          AsyncStorage.setItem(KEY_EMAIL, e || ''),
+          SecureStore.setItemAsync(KEY_PASSWORD, p || '', { keychainService: 'fidelapp.auth' }),
+        ]);
+      } else {
+        await Promise.all([
+          AsyncStorage.setItem(KEY_REMEMBER, '0'),
+          AsyncStorage.removeItem(KEY_EMAIL),
+          SecureStore.deleteItemAsync(KEY_PASSWORD),
+        ]);
+      }
+    } catch {}
+  }
+
   function toggleMode() {
     setErr(null);
     setBusy(false);
-    // limpa os campos e troca o modo
     setEmail('');
     setPassword('');
     setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
-    // foca no e-mail no próximo frame
     setTimeout(() => emailRef.current?.focus(), 50);
   }
 
@@ -202,7 +244,6 @@ export default function AuthScreen() {
       return;
     }
 
-    // ✅ Validação amigável no front ao criar conta
     if (mode === 'signup') {
       const hasLen = password.length >= 6;
       const hasUpper = /[A-Z]/.test(password);
@@ -217,6 +258,8 @@ export default function AuthScreen() {
     try {
       if (mode === 'signin') {
         await signInWithEmail(email.trim(), password);
+        // ✅ NEW: persiste a escolha após login OK
+        await persistChoice(remember, email.trim(), password);
         router.replace('/cards' as never);
       } else {
         await signUpWithEmail(email.trim(), password);
@@ -229,7 +272,6 @@ export default function AuthScreen() {
         setTimeout(() => emailRef.current?.focus(), 50);
       }
     } catch (e: any) {
-      // Pega mensagens amigáveis vindas do lib/auth.ts também
       setErr(e?.message ?? 'Falha de autenticação');
     } finally {
       setBusy(false);
@@ -264,7 +306,7 @@ export default function AuthScreen() {
               justifyContent: 'center',
               gap: 16,
             }}
-            style={{ flex: 1, backgroundColor: BG }} // 👈 evita “escurecimento”
+            style={{ flex: 1, backgroundColor: BG }}
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="none"
           >
@@ -305,7 +347,7 @@ export default function AuthScreen() {
             justifyContent: 'center',
             gap: 16,
           }}
-          style={{ flex: 1, backgroundColor: BG }} // 👈 evita “escurecimento”
+          style={{ flex: 1, backgroundColor: BG }}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
         >
@@ -323,18 +365,54 @@ export default function AuthScreen() {
               inputRef={emailRef}
             />
 
-            {/* 👇 Campo de senha com olho */}
             <PasswordInput
               value={password}
               onChangeText={setPassword}
               placeholder="Senha (mín. 6, 1 maiús., 1 número)"
             />
 
-            {/* Mostra as regras somente no modo de cadastro */}
             {mode === 'signup' ? <PasswordRules password={password} /> : null}
           </View>
 
           {err ? <Text style={{ color: 'crimson' }}>{err}</Text> : null}
+
+          {/* ✅ NEW: Lembrar meus dados */}
+          <Pressable
+            onPress={async () => {
+              const next = !remember;
+              setRemember(next);
+              if (!next) {
+                // se desmarcar, limpa imediatamente
+                await AsyncStorage.setItem(KEY_REMEMBER, '0');
+                await AsyncStorage.removeItem(KEY_EMAIL);
+                await SecureStore.deleteItemAsync(KEY_PASSWORD);
+              } else {
+                // se marcar, salva o estado atual (se existir)
+                await AsyncStorage.setItem(KEY_REMEMBER, '1');
+                if (email) await AsyncStorage.setItem(KEY_EMAIL, email);
+                if (password) await SecureStore.setItemAsync(KEY_PASSWORD, password, { keychainService: 'fidelapp.auth' });
+              }
+            }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: remember }}
+          >
+            <View
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: 'rgba(0,0,0,0.4)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: remember ? '#111' : 'transparent',
+              }}
+            >
+              {remember ? <Text style={{ color: '#fff', fontSize: 14 }}>✓</Text> : null}
+            </View>
+            <Text style={{ fontSize: 14 }}>Lembrar meus dados</Text>
+          </Pressable>
 
           <Pressable
             onPress={handleSubmit}

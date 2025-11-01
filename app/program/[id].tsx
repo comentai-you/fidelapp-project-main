@@ -31,8 +31,6 @@ import { useStore } from '@/state/store';
 // utils
 const onlyDigits = (s: string) => (s || '').replace(/\D/g, '');
 const circles = (n: number) => Array.from({ length: n }, (_, i) => i);
-const FOOTER_H = 92; // altura aproximada do rodapé com os 2 botões
-
 
 function useSheetAnim(isOpen: boolean) {
   const anim = useRef(new Animated.Value(0)).current;
@@ -152,44 +150,35 @@ export default function ProgramDetail() {
   }
 
   async function saveCustomer() {
-  if (!program) return;
-  if (loading.save) return;
+    if (!program) return;
+    if (loading.save) return;
 
-  const digits = onlyDigits(phoneMasked);
-  if (!name.trim()) return Alert.alert('Informe o nome do cliente.');
-  if (digits.length !== 11 || digits[2] !== '9') {
-    return Alert.alert('Telefone inválido', 'Informe um celular válido: (DD) 9XXXX-XXXX');
+    const digits = onlyDigits(phoneMasked);
+    if (!name.trim()) return Alert.alert('Informe o nome do cliente.');
+    if (digits.length !== 11 || digits[2] !== '9') {
+      return Alert.alert('Telefone inválido', 'Informe um celular válido: (DD) 9XXXX-XXXX');
+    }
+
+    // 👉 normaliza para E.164 (Brasil)
+    const e164 = `55${digits}`;
+
+    // 👉 BLOQUEIO: número duplicado no mesmo programa
+    const duplicate = customers.some((c) => c.phone === e164);
+    if (duplicate) {
+      return Alert.alert('Número já cadastrado', 'Já existe um cliente com este telefone neste programa.');
+    }
+
+    try {
+      setLoading((s) => ({ ...s, save: true }));
+      addCustomer({ name: name.trim(), phone: e164, programId: program.id });
+      setName('');
+      setPhoneMasked('');
+      setCreating(false);
+      toast('Cliente salvo!', 'success');
+    } finally {
+      setLoading((s) => ({ ...s, save: false }));
+    }
   }
-
-  // 👉 normaliza para E.164 (Brasil)
-  const e164 = `55${digits}`;
-
-  // 👉 BLOQUEIO: número duplicado no mesmo programa
-  // (lista `customers` já está filtrada pelo programId atual)
-  const duplicate = customers.some((c) => c.phone === e164);
-  if (duplicate) {
-    return Alert.alert(
-      'Número já cadastrado',
-      'Já existe um cliente com este telefone neste programa.'
-    );
-  }
-
-  try {
-    setLoading((s) => ({ ...s, save: true }));
-
-    // cria de fato
-    addCustomer({ name: name.trim(), phone: e164, programId: program.id });
-
-    // sucesso → limpa, fecha e toast
-    setName('');
-    setPhoneMasked('');
-    setCreating(false);
-    toast('Cliente salvo!', 'success');
-  } finally {
-    setLoading((s) => ({ ...s, save: false }));
-  }
-}
-
 
   // sheet geral (carimbar/resgatar)
   const [carimbarOpen, setCarimbarOpen] = useState(false);
@@ -209,10 +198,7 @@ export default function ProgramDetail() {
     return customers.filter((c) => c.name.toLowerCase().includes(q));
   }, [customers, debouncedQuery]);
 
-  const selectedCustomer = useMemo(
-    () => customers.find((c) => c.id === selectedId) || null,
-    [customers, selectedId]
-  );
+  const selectedCustomer = useMemo(() => customers.find((c) => c.id === selectedId) || null, [customers, selectedId]);
 
   const [showPin, setShowPin] = useState(false);
   const [showQuickPin, setShowQuickPin] = useState(false);
@@ -293,10 +279,7 @@ export default function ProgramDetail() {
   const [quickId, setQuickId] = useState<string | null>(null);
   const [quickPin, setQuickPin] = useState('');
 
-  const quickCustomer = useMemo(
-    () => (quickId ? customers.find((c) => c.id === quickId) || null : null),
-    [customers, quickId]
-  );
+  const quickCustomer = useMemo(() => (quickId ? customers.find((c) => c.id === quickId) || null : null), [customers, quickId]);
 
   async function doQuickStamp() {
     if (!program) return;
@@ -461,9 +444,7 @@ export default function ProgramDetail() {
   if (!program) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-        <Text style={{ color: theme.colors.title, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
-          Programa não encontrado
-        </Text>
+        <Text style={{ color: theme.colors.title, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>Programa não encontrado</Text>
         <Text style={{ color: theme.colors.text, marginTop: 8, textAlign: 'center' }}>
           O programa pode ter sido removido. Volte e selecione novamente.
         </Text>
@@ -520,9 +501,7 @@ export default function ProgramDetail() {
         <FlatList
           data={customers}
           keyExtractor={(c) => c.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: FOOTER_H + safeBottom, // evita o overlap e NÃO rola com a lista
-}}
-          // 👇 separador entre cards (resolve “colado”)
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           ListHeaderComponent={
             <UICard style={{ marginBottom: 12 }}>
@@ -532,12 +511,20 @@ export default function ProgramDetail() {
               </Text>
 
               <View style={{ height: 12 }} />
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
+
+              {/* Ações do programa — grid 2x2: Editar / Remover / + Novo cliente / Carimbar */}
+              <View style={styles.headerActions}>
+                <View style={styles.headerActionCol}>
                   <Button title="Editar programa" onPress={openEdit} />
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={styles.headerActionCol}>
                   <Button variant="outline" title="Remover programa" onPress={handleRemoveProgram} />
+                </View>
+                <View style={styles.headerActionCol}>
+                  <Button title="+ Novo cliente" onPress={() => setCreating(true)} />
+                </View>
+                <View style={styles.headerActionCol}>
+                  <Button variant="ghost" title="Carimbar" onPress={() => { setCarimbarOpen(true); setSelectedId(null); }} />
                 </View>
               </View>
             </UICard>
@@ -631,18 +618,6 @@ export default function ProgramDetail() {
             );
           }}
         />
-
-        {!carimbarOpen && !creating && !quickStampOpen && !quickRedeemOpen && !editOpen && (
-          <View style={[styles.fabs, { bottom: safeBottom }]}>
-            <View style={{ flex: 1 }}>
-              <Button title="+ Novo cliente" onPress={() => setCreating(true)} />
-            </View>
-            <View style={{ width: 12 }} />
-            <View style={{ flex: 1 }}>
-              <Button title="Carimbar" onPress={() => { setCarimbarOpen(true); setSelectedId(null); }} />
-            </View>
-          </View>
-        )}
 
         {/* Novo cliente */}
         {creating && (
@@ -819,11 +794,7 @@ export default function ProgramDetail() {
                 autoCorrect={false}
                 autoCapitalize="none"
               />
-              <Pressable
-                onPress={() => setShowQuickRedeemPin((v) => !v)}
-                style={styles.pinToggle}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
+              <Pressable onPress={() => setShowQuickRedeemPin((v) => !v)} style={styles.pinToggle} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <Text style={styles.pinToggleText}>{showQuickRedeemPin ? 'Esconder' : 'Mostrar'}</Text>
               </Pressable>
             </View>
@@ -906,17 +877,20 @@ export default function ProgramDetail() {
 }
 
 const styles = StyleSheet.create({
+  // grid dos 4 botões do topo (2x2)
+  headerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  headerActionCol: {
+    flexBasis: '48%',
+    flexGrow: 1,
+  },
+
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   actionCol: { flexBasis: '48%', flexGrow: 1 },
-  fabs: {
-  position: 'absolute',
-  left: 16,
-  right: 16,
-  // o bottom já vem dinâmico pelo estilo inline: { bottom: safeBottom }
-  flexDirection: 'row',
-  zIndex: 100,        // iOS
-  elevation: 20,      // Android
-},
+
   sheet: {
     position: 'absolute',
     left: 16,
