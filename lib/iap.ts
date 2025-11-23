@@ -1,13 +1,28 @@
-// lib/iap.ts — STUB seguro (sem módulos nativos)
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+
+const { IAPModule } = NativeModules;
+const emitter = new NativeEventEmitter(IAPModule);
+
+export type Product = { productId: string; title?: string; description?: string; price?: string };
+
 export async function initIAP() {
-  // no-op por enquanto
+  if (Platform.OS !== 'android') return false;
+  return IAPModule.init();
 }
-export function endConnection() {
-  // no-op
+
+export async function loadProducts(): Promise<Product[]> {
+  const res = await IAPModule.loadProducts();
+  return res;
 }
-export async function getSubs() {
-  return [];
+
+export async function buy(productId: string) {
+  return IAPModule.buy(productId);
 }
-export async function requestSub(_sku: string) {
-  return;
+
+export function onPurchaseSuccess(cb: (payload: { purchaseToken: string; productId: string }) => void) {
+  return emitter.addListener('IAP_purchase_success', cb);
+}
+
+export function onPurchaseFailed(cb: (payload: any) => void) {
+  return emitter.addListener('IAP_purchase_failed', cb);
 }
