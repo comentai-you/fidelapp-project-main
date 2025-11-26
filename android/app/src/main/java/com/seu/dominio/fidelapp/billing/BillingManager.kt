@@ -5,6 +5,9 @@ import android.content.Context
 import android.util.Log
 import com.android.billingclient.api.*
 
+// A interface deve estar aqui ou fora, mas vamos mantê-la dentro da classe para organização, 
+// como estava no seu código original, mas com a sintaxe correta.
+
 class BillingManager(
     private val context: Context,
     private val listener: BillingListener
@@ -35,15 +38,12 @@ class BillingManager(
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.d(TAG, "Billing ready")
                     
-                    // ✅ ALTERAÇÃO APLICADA: 
-                    // Consulta e trata compras ativas/pendentes (não reconhecidas) ao iniciar.
+                    // Ação de robustez para tratar compras ativas/pendentes
                     queryActiveSubscriptions { purchases ->
-                        // Trata cada compra ativa (incluindo as não reconhecidas)
                         purchases.forEach { handlePurchase(it) } 
-                        
-                        // Em seguida, carrega a lista de produtos (compatibilidade)
                         queryAvailableSubscriptions() 
                     }
+
                 } else {
                     Log.w(TAG, "Billing setup failed: ${billingResult.debugMessage}")
                 }
@@ -52,17 +52,10 @@ class BillingManager(
         })
     }
 
-    /**
-     * Versão compatível sem callback — chama a outra versão e notifica apenas o listener interno.
-     * Mantém compatibilidade com código que só chama queryAvailableSubscriptions().
-     */
     fun queryAvailableSubscriptions() {
         queryAvailableSubscriptions { /* noop callback */ }
     }
 
-    /**
-     * Versão que aceita um callback com a lista de ProductDetails — usada pelo módulo Kotlin/JS.
-     */
     fun queryAvailableSubscriptions(callback: (List<ProductDetails>) -> Unit) {
         val productList = listOf(
             QueryProductDetailsParams.Product.newBuilder()
@@ -79,21 +72,10 @@ class BillingManager(
         billingClient.queryProductDetailsAsync(params) { billingResult, list ->
             val safeList = list ?: emptyList()
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                // Primeiro notifica quem pediu diretamente
-                try {
-                    callback(safeList)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Callback erro ao processar produtos: ${e.message}")
-                }
-                // Depois notifica o listener padrão (compatibilidade)
+                try { callback(safeList) } catch (e: Exception) { Log.w(TAG, "Callback erro ao processar produtos: ${e.message}") }
                 listener.onProductsLoaded(safeList)
             } else {
-                // garante fallback vazio
-                try {
-                    callback(emptyList())
-                } catch (e: Exception) {
-                    Log.w(TAG, "Callback erro ao processar produtos (fallback): ${e.message}")
-                }
+                try { callback(emptyList()) } catch (e: Exception) { Log.w(TAG, "Callback erro ao processar produtos (fallback): ${e.message}") }
                 listener.onProductsLoaded(emptyList())
             }
         }
@@ -129,7 +111,6 @@ class BillingManager(
 
     private fun handlePurchase(purchase: Purchase) {
         if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-            // Verifica se precisa reconhecer a compra (Obrigatório pelo Google)
             if (!purchase.isAcknowledged) {
                 val ack = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.purchaseToken).build()
                 billingClient.acknowledgePurchase(ack) { ackResult ->
@@ -140,7 +121,6 @@ class BillingManager(
                     }
                 }
             } else {
-                // Compra já reconhecida (Ex: consulta ativa)
                 listener.onPurchaseSuccess(purchase)
             }
         } else {
@@ -148,9 +128,6 @@ class BillingManager(
         }
     }
 
-    /**
-     * Consulta a lista de compras ativas (e não consumidas/não reconhecidas) para o tipo SUBS.
-     */
     fun queryActiveSubscriptions(callback: (List<Purchase>) -> Unit) {
         billingClient.queryPurchasesAsync(
             QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.SUBS).build()
