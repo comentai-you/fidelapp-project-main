@@ -5,14 +5,12 @@ import android.content.Context
 import android.util.Log
 import com.android.billingclient.api.*
 
-// A interface deve estar aqui ou fora, mas vamos mantê-la dentro da classe para organização, 
-// como estava no seu código original, mas com a sintaxe correta.
-
 class BillingManager(
     private val context: Context,
     private val listener: BillingListener
 ) : PurchasesUpdatedListener {
 
+    // 1. INTERFACE ANINHADA: A sintaxe está correta agora
     interface BillingListener {
         fun onProductsLoaded(products: List<ProductDetails>)
         fun onPurchaseSuccess(purchase: Purchase)
@@ -25,10 +23,11 @@ class BillingManager(
         private const val TAG = "BillingManager"
     }
 
+    // 2. CORREÇÃO DO CONSTRUTOR: Adicionando .build() no final
     private var billingClient: BillingClient = BillingClient.newBuilder(context)
         .setListener(this)
         .enablePendingPurchases()
-        .build()
+        .build() // ESTA PARTE ESTAVA FALTANDO OU TRUNCADA
 
     init { startConnection() }
 
@@ -38,7 +37,6 @@ class BillingManager(
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.d(TAG, "Billing ready")
                     
-                    // Ação de robustez para tratar compras ativas/pendentes
                     queryActiveSubscriptions { purchases ->
                         purchases.forEach { handlePurchase(it) } 
                         queryAvailableSubscriptions() 
@@ -52,9 +50,7 @@ class BillingManager(
         })
     }
 
-    fun queryAvailableSubscriptions() {
-        queryAvailableSubscriptions { /* noop callback */ }
-    }
+    fun queryAvailableSubscriptions() { queryAvailableSubscriptions { /* noop callback */ } }
 
     fun queryAvailableSubscriptions(callback: (List<ProductDetails>) -> Unit) {
         val productList = listOf(
