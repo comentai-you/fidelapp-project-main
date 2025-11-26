@@ -11,6 +11,9 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
     private var billing: BillingManager? = null
     private val products = mutableMapOf<String, ProductDetails>()
 
+    // PROMISE DE COMPRA (corrige o bug!)
+    private var purchasePromise: Promise? = null
+
     override fun getName(): String = "IAPModule"
 
     @ReactMethod
@@ -30,7 +33,6 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
             return
         }
 
-        // Usa a nova assinatura com callback
         b.queryAvailableSubscriptions { list ->
             val arr = Arguments.createArray()
             list.forEach { pd ->
@@ -68,16 +70,15 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
             return
         }
 
+        // Salva promise para resolver apenas após confirmação real!
+        purchasePromise = promise
+
         billing?.launchPurchase(activity, pd)
-        promise.resolve(true)
     }
 
     /* ------------------------------ EVENTS ------------------------------ */
 
-    // Implementação obrigatória da interface
     override fun onProductsLoaded(products: List<ProductDetails>) {
-        // opcional: emitir um evento JS sempre que produtos forem carregados
-        // (você já resolve a Promise no loadProducts via callback, então pode ser noop)
         val arr = Arguments.createArray()
         products.forEach { pd ->
             val m = Arguments.createMap()
@@ -95,9 +96,16 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
         map.putString("productId", purchase.products.firstOrNull())
         map.putString("token", purchase.purchaseToken)
 
+        // Evento para JS
         reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("IAP_purchase_success", map)
+
+        // Resolve a promise REAL da compra
+        purchasePromise?.resolve(map)
+        purchasePromise = null
     }
+
+    
 
     override fun onPurchaseFailed(message: String) {
         val map = Arguments.createMap()
@@ -105,5 +113,9 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
 
         reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("IAP_purchase_failed", map)
+
+        // Rejeita promise da compra
+        purchasePromise?.reject("purchase_failed", message)
+        purchasePromise = null
     }
 }
