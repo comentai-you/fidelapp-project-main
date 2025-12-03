@@ -26,6 +26,10 @@ export default function PlansScreen() {
   const [gProducts, setGProducts] = React.useState<Record<string, any>>({});
   const [purchaseInProgress, setPurchaseInProgress] = React.useState(false);
   const [selectedPlanPending, setSelectedPlanPending] = React.useState<PlanKey | null>(null);
+  
+  // 👇 NOVO ESTADO: Contador de tentativas de carregamento
+  const [retryCount, setRetryCount] = React.useState(0);
+  
   const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -48,33 +52,59 @@ export default function PlansScreen() {
     return { programs, maxCustomersInOneProgram };
   }, [state.programs, state.customers]);
 
+  // 👇 USE EFFECT ATUALIZADO: Com lógica de retry
   React.useEffect(() => {
     let mounted = true;
+    let retryTimeout: any;
 
     async function init() {
+      // 1. Tenta inicializar (pode já estar conectado)
       try {
         await initIAP();
       } catch (e) {
-        console.warn("initIAP falhou", e);
-        toast("Erro ao iniciar sistema de pagamentos.", "error");
+        console.warn("initIAP falhou ou já iniciado", e);
       }
 
+      // 2. Tenta carregar produtos
       try {
+        console.log(`[IAP] Carregando produtos (Tentativa ${retryCount + 1})...`);
         const prods = await loadProducts();
+        
         if (!mounted) return;
-        const mapped = Object.fromEntries(prods.map((p: any) => [p.productId, p]));
-        setGProducts(mapped);
+
+        // Se produtos voltaram, sucesso!
+        if (prods && prods.length > 0) {
+            console.log("[IAP] Produtos carregados com sucesso:", prods.length);
+            const mapped = Object.fromEntries(prods.map((p: any) => [p.productId, p]));
+            setGProducts(mapped);
+        } else {
+            // Se veio vazio, e ainda não tentamos 5 vezes, tenta de novo
+            if (retryCount < 5) {
+                console.log("[IAP] Lista vazia. Agendando retry...");
+                retryTimeout = setTimeout(() => {
+                    if (mounted) setRetryCount((prev) => prev + 1);
+                }, 1500); // Espera 1.5s
+            } else {
+                console.warn("[IAP] Falha ao carregar produtos após 5 tentativas.");
+                // Opcional: Mostrar erro para usuário apenas se falhar 5x
+                // toast("Não foi possível carregar os preços.", "error");
+            }
+        }
       } catch (err) {
-        console.warn("loadProducts erro", err);
+        console.warn("[IAP] loadProducts erro:", err);
+        // Se deu erro (ex: não conectado), também tenta de novo
+        if (retryCount < 5) {
+            retryTimeout = setTimeout(() => {
+                if (mounted) setRetryCount((prev) => prev + 1);
+            }, 1500);
+        }
       }
     }
 
     const okSub = onPurchaseSuccess(async (p: any) => {
       console.log("IAP success event:", p);
 
-      // chama o backend para validar e salvar no Supabase
       try {
-        // exemplo: endpoint hospedado em /api/validate-subscription (Vercel) — ajustar URL conforme deploy
         const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'https://your-backend.example.com'}/api/validate-subscription`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -87,7 +117,6 @@ export default function PlansScreen() {
         const json = await res.json();
         if (!res.ok) throw new Error(json?.message || 'validation failed');
 
-        // backend validou e gravou no Supabase — só então atualizamos localmente
         if (json.productId === 'fidelapp_start_mensal') {
           setPlan('start');
           toast("Assinatura Start ativada com sucesso!", 'success');
@@ -121,9 +150,10 @@ export default function PlansScreen() {
       mounted = false;
       okSub.remove();
       failSub.remove();
+      clearTimeout(retryTimeout); // Limpa o retry se sair da tela
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
     };
-  }, [toast, setPlan]);
+  }, [toast, setPlan, retryCount]); // retryCount faz o efeito rodar de novo
 
   function canApply(plan: PlanKey) {
     const limits = LIMITS[plan];
@@ -151,8 +181,14 @@ export default function PlansScreen() {
 
     const productId = plan === 'start' ? 'fidelapp_start_mensal' : 'fidelapp_pro_mensal';
     const p = gProducts[productId];
+    
+    // 👇 AJUSTE: Mensagem mais amigável se ainda estiver carregando
     if (!p) {
-      toast("Produtos ainda carregando. Tente novamente.", "info");
+      if (retryCount < 5) {
+          toast("Carregando preços... Tente em instantes.", "info");
+      } else {
+          toast("Erro ao carregar produtos do Google. Verifique sua conexão.", "error");
+      }
       return;
     }
 
@@ -172,7 +208,6 @@ export default function PlansScreen() {
       }, 60000) as unknown as number;
 
       await buy(productId);
-      // aqui aguardamos evento de sucesso do natve -> backend validado -> setPlan
     } catch (err) {
       console.warn("Erro ao iniciar compra:", err);
       toast("Erro ao iniciar a compra.", 'error');
