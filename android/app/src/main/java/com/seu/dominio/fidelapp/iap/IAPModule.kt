@@ -11,7 +11,7 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
     private var billing: BillingManager? = null
     private val products = mutableMapOf<String, ProductDetails>()
 
-    // PROMISE DE COMPRA (corrige o bug!)
+    // PROMISE DE COMPRA
     private var purchasePromise: Promise? = null
 
     override fun getName(): String = "IAPModule"
@@ -35,30 +35,45 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
 
         b.queryAvailableSubscriptions { list ->
             val arr = Arguments.createArray()
+            
             list.forEach { pd ->
                 val map = Arguments.createMap()
                 map.putString("productId", pd.productId)
                 map.putString("title", pd.title)
                 map.putString("description", pd.description)
 
-                val price = pd.subscriptionOfferDetails
-                    ?.firstOrNull()
+                // --- 1. PREÇO FORMATADO (Pegando da primeira oferta) ---
+                val firstOffer = pd.subscriptionOfferDetails?.firstOrNull()
+                val price = firstOffer
                     ?.pricingPhases
                     ?.pricingPhaseList
                     ?.firstOrNull()
                     ?.formattedPrice ?: "R$?"
 
                 map.putString("price", price)
-                arr.pushMap(map)
 
+                // --- 2. [CORREÇÃO CRÍTICA] ENVIAR OFERTAS PARA O JS ---
+                // O plans.tsx precisa ler "subscriptionOfferDetails" para pegar o token
+                val offersArr = Arguments.createArray()
+                pd.subscriptionOfferDetails?.forEach { details ->
+                    val offerMap = Arguments.createMap()
+                    offerMap.putString("offerToken", details.offerToken)
+                    // Você pode adicionar mais detalhes da oferta aqui se precisar
+                    offersArr.pushMap(offerMap)
+                }
+                map.putArray("subscriptionOfferDetails", offersArr)
+                // -----------------------------------------------------
+
+                arr.pushMap(map)
                 products[pd.productId] = pd
             }
             promise.resolve(arr)
         }
     }
 
+    // --- 3. [CORREÇÃO CRÍTICA] RECEBER O OFFER TOKEN ---
     @ReactMethod
-    fun buy(productId: String, promise: Promise) {
+    fun buy(productId: String, offerToken: String, promise: Promise) {
         val pd = products[productId]
         val activity = reactCtx.currentActivity ?: run {
             promise.reject("no_activity", "No activity")
@@ -70,21 +85,38 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
             return
         }
 
+        if (purchasePromise != null) {
+            promise.reject("purchase_pending", "A purchase is already in progress")
+            return
+        }
+
         // Salva promise para resolver apenas após confirmação real!
         purchasePromise = promise
 
-        billing?.launchPurchase(activity, pd)
+        // ATENÇÃO: O método launchPurchase no seu BillingManager deve aceitar (Activity, ProductDetails, String)
+        billing?.launchPurchase(activity, pd, offerToken)
     }
 
     /* ------------------------------ EVENTS ------------------------------ */
 
     override fun onProductsLoaded(products: List<ProductDetails>) {
+        // Este evento é opcional se você usa apenas a Promise do loadProducts,
+        // mas mantivemos para compatibilidade.
         val arr = Arguments.createArray()
         products.forEach { pd ->
             val m = Arguments.createMap()
             m.putString("productId", pd.productId)
             m.putString("title", pd.title)
-            m.putString("description", pd.description)
+            
+            // Injetando offers aqui também caso use via evento
+            val offersArr = Arguments.createArray()
+            pd.subscriptionOfferDetails?.forEach { details ->
+               val oMap = Arguments.createMap()
+               oMap.putString("offerToken", details.offerToken)
+               offersArr.pushMap(oMap)
+            }
+            m.putArray("subscriptionOfferDetails", offersArr)
+
             arr.pushMap(m)
         }
         reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
@@ -93,26 +125,30 @@ class IAPModule(private val reactCtx: ReactApplicationContext)
 
     override fun onPurchaseSuccess(purchase: com.android.billingclient.api.Purchase) {
         val map = Arguments.createMap()
+        // O productId vem numa lista, pegamos o primeiro
         map.putString("productId", purchase.products.firstOrNull())
         map.putString("token", purchase.purchaseToken)
+        map.putString("purchaseToken", purchase.purchaseToken) // Redundância para garantir compatibilidade
 
         // Evento para JS
-        reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit("IAP_purchase_success", map)
+        if (reactCtx.hasActiveCatalystInstance()) {
+            reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("IAP_purchase_success", map)
+        }
 
         // Resolve a promise REAL da compra
         purchasePromise?.resolve(map)
         purchasePromise = null
     }
 
-    
-
     override fun onPurchaseFailed(message: String) {
         val map = Arguments.createMap()
         map.putString("error", message)
 
-        reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit("IAP_purchase_failed", map)
+        if (reactCtx.hasActiveCatalystInstance()) {
+            reactCtx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("IAP_purchase_failed", map)
+        }
 
         // Rejeita promise da compra
         purchasePromise?.reject("purchase_failed", message)

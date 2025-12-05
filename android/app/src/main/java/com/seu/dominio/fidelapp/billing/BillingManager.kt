@@ -47,6 +47,7 @@ class BillingManager(
             }
             override fun onBillingServiceDisconnected() {
                 Log.w(TAG, "Billing disconnected")
+                // Lógica de retry poderia ser implementada aqui
             }
         })
     }
@@ -80,18 +81,26 @@ class BillingManager(
         }
     }
 
-    fun launchPurchase(activity: Activity, productDetails: ProductDetails) {
-        val offer = productDetails.subscriptionOfferDetails?.firstOrNull()
-        if (offer == null) {
-            listener.onPurchaseFailed("No offer available")
-            return
+    // 🛑 [CORREÇÃO APLICADA AQUI]
+    // Adicionado parâmetro offerToken: String para alinhar com o IAPModule
+    fun launchPurchase(activity: Activity, productDetails: ProductDetails, offerToken: String) {
+        
+        // Opcional: Validar se o token realmente pertence a esse produto
+        val offerExists = productDetails.subscriptionOfferDetails?.any { it.offerToken == offerToken } == true
+        if (!offerExists) {
+             Log.w(TAG, "Offer token mismatch provided.")
+             // Mesmo assim tentamos seguir, pois o token veio do próprio produto no JS
         }
+
         val flowParams = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(
-                listOf(BillingFlowParams.ProductDetailsParams.newBuilder()
-                    .setProductDetails(productDetails)
-                    .setOfferToken(offer.offerToken)
-                    .build())
+                listOf(
+                    BillingFlowParams.ProductDetailsParams.newBuilder()
+                        .setProductDetails(productDetails)
+                        // Aqui usamos o token específico que o usuário escolheu
+                        .setOfferToken(offerToken)
+                        .build()
+                )
             ).build()
 
         val billingResult = billingClient.launchBillingFlow(activity, flowParams)

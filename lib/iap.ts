@@ -4,7 +4,14 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 const { IAPModule } = NativeModules;
 const emitter = IAPModule ? new NativeEventEmitter(IAPModule) : null;
 
-export type Product = { productId: string; title?: string; description?: string; price?: string };
+// Atualizei a tipagem para incluir o que o plans.tsx está usando agora
+export type Product = { 
+  productId: string; 
+  title?: string; 
+  description?: string; 
+  price?: string;
+  subscriptionOfferDetails?: Array<{ offerToken: string }>; 
+};
 
 export async function initIAP(): Promise<boolean> {
   if (Platform.OS !== 'android' || !IAPModule) return false;
@@ -28,9 +35,12 @@ export async function loadProducts(): Promise<Product[]> {
   }
 }
 
-export async function buy(productId: string): Promise<any> {
+// 🛑 CORREÇÃO APLICADA: Adicionado offerToken como argumento
+export async function buy(productId: string, offerToken: string): Promise<any> {
   if (!IAPModule) throw new Error('IAPModule not available');
-  return IAPModule.buy(productId);
+  
+  // Agora passamos o offerToken para o Kotlin
+  return IAPModule.buy(productId, offerToken);
 }
 
 // retorna um subscription object que tem .remove()

@@ -163,41 +163,41 @@ export default function PlansScreen() {
   }
 
   async function onSelect(plan: PlanKey) {
-    if (!canApply(plan)) {
-      const limits = LIMITS[plan];
-      toast(
-        `Este plano permite até ${limits.programs} cartão(ões) e ${limits.customersPerProgram} clientes por cartão. ` +
-        `Ajuste seus dados para mudar para ${limits.title}.`,
-        'info'
-      );
-      return;
-    }
+    if (!canApply(plan)) {
+      const limits = LIMITS[plan];
+      toast(
+        `Este plano permite até ${limits.programs} cartão(ões) e ${limits.customersPerProgram} clientes por cartão. ` +
+        `Ajuste seus dados para mudar para ${limits.title}.`,
+        'info'
+      );
+      return;
+    }
 
-    if (plan === 'freemium') {
-      setPlan('freemium');
-      toast('Você voltou para o plano gratuito.', 'success');
-      return;
-    }
+    if (plan === 'freemium') {
+      setPlan('freemium');
+      toast('Você voltou para o plano gratuito.', 'success');
+      return;
+    }
 
-    const productId = plan === 'start' ? 'fidelapp_start_mensal' : 'fidelapp_pro_mensal';
-    const p = gProducts[productId];
-    
-    // Corrigimos a lógica de carregamento, mas o usuário ainda pode clicar antes de carregar
-    if (!p) {
-      if (retryCount < 5) {
-          toast("Carregando preços... Tente em instantes.", "info");
-      } else {
-          toast("Erro ao carregar produtos do Google. Verifique sua conexão.", "error");
-      }
-      return;
-    }
+    const productId = plan === 'start' ? 'fidelapp_start_mensal' : 'fidelapp_pro_mensal';
+    const p = gProducts[productId];
+    
+    // Corrigimos a lógica de carregamento, mas o usuário ainda pode clicar antes de carregar
+    if (!p) {
+      if (retryCount < 5) {
+          toast("Carregando preços... Tente em instantes.", "info");
+      } else {
+          toast("Erro ao carregar produtos do Google. Verifique sua conexão.", "error");
+      }
+      return;
+    }
 
-    if (purchaseInProgress) {
-      toast("Uma compra já está em andamento. Aguarde...", "info");
-      return;
-    }
+    if (purchaseInProgress) {
+      toast("Uma compra já está em andamento. Aguarde...", "info");
+      return;
+    }
 
-    // 🛑 NOVO CHECK CRÍTICO (antes de chamar o módulo nativo)
+    // 🛑 NOVO CHECK CRÍTICO (antes de chamar o módulo nativo)
     // O objeto ProductDetails (p) deve ter as ofertas de assinatura (subscriptionOfferDetails).
     if (!p.subscriptionOfferDetails || p.subscriptionOfferDetails.length === 0) {
         console.error("ERRO CRÍTICO: Produto não tem ofertas de assinatura válidas no Google Play Console.");
@@ -205,26 +205,30 @@ export default function PlansScreen() {
         return;
     }
 
+    // [CORREÇÃO APLICADA AQUI]
+    // Pegamos o offerToken da primeira oferta disponível (padrão para assinaturas simples)
+    const offerToken = p.subscriptionOfferDetails[0].offerToken;
 
-    try {
-      setPurchaseInProgress(true);
-      setSelectedPlanPending(plan);
-      timeoutRef.current = global.setTimeout(() => {
-        setPurchaseInProgress(false);
-        setSelectedPlanPending(null);
-        toast("Tempo esgotado ao processar a compra. Tente novamente.", "error");
-        timeoutRef.current = null;
-      }, 60000) as unknown as number;
+    try {
+      setPurchaseInProgress(true);
+      setSelectedPlanPending(plan);
+      timeoutRef.current = global.setTimeout(() => {
+        setPurchaseInProgress(false);
+        setSelectedPlanPending(null);
+        toast("Tempo esgotado ao processar a compra. Tente novamente.", "error");
+        timeoutRef.current = null;
+      }, 60000) as unknown as number;
 
-      await buy(productId); // Chama o código nativo (IAPModule.kt)
-    } catch (err) {
-      console.warn("Erro ao iniciar compra:", err);
-      toast("Erro ao iniciar a compra.", 'error');
-      setPurchaseInProgress(false);
-      setSelectedPlanPending(null);
-      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-    }
-  }
+      // [CORREÇÃO APLICADA AQUI] Passamos o offerToken como segundo argumento
+      await buy(productId, offerToken); 
+    } catch (err) {
+      console.warn("Erro ao iniciar compra:", err);
+      toast("Erro ao iniciar a compra.", 'error');
+      setPurchaseInProgress(false);
+      setSelectedPlanPending(null);
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    }
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
