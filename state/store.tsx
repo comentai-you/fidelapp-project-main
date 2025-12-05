@@ -260,7 +260,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!userId) return;
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
         .select('plan, max_programs, max_customers_per_program')
         .eq('id', userId)
         .single();
