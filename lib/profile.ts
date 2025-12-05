@@ -20,7 +20,7 @@ export async function ensureUserProfile() {
 
   // ✅ CORREÇÃO 1: Tenta ler o perfil da tabela 'profiles'
   const { data: existing, error: readErr } = await supabase
-    .from('profiles') // <-- CORRIGIDO
+    .from('users') // <-- CORRIGIDO
     .select('*, max_programs, max_customers_per_program, plan') // Inclui as novas colunas
     .eq('id', user.id)
     .maybeSingle();
@@ -31,7 +31,7 @@ export async function ensureUserProfile() {
   // Se não existir, o SQL Trigger (que criamos antes) deveria ter criado o ID.
   // Se, por alguma razão, o perfil ainda estiver faltando, criamos com os valores padrão.
   const { data: created, error: insErr } = await supabase
-    .from('profiles') // <-- CORRIGIDO
+    .from('users') // <-- CORRIGIDO
     .insert({
       id: user.id,
       plan: 'freemium',

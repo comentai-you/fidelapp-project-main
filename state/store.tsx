@@ -260,7 +260,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!userId) return;
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('plan, max_programs, max_customers_per_program')
         .eq('id', userId)
         .single();
@@ -285,7 +285,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!userId) return;
       const { data, error } = await supabase
-        .from('profiles') // ← nome da tabela que você criou
+        .from('users') // ← nome da tabela que você criou
         .select('owner_name, store_name, phone, email, business_type')
         .eq('id', userId)
         .single();
@@ -446,7 +446,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       const current = { ...state.profile, ...patch };
       try {
-        await supabase.from('profiles').upsert(
+        await supabase.from('users').upsert(
           {
             id: userId,
             owner_name: current.ownerName || null,
