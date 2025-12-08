@@ -45,11 +45,13 @@ export async function buy(productId: string, offerToken: string): Promise<any> {
 
 // retorna um subscription object que tem .remove()
 export function onPurchaseSuccess(cb: (payload: { purchaseToken: string; productId: string }) => void) {
-  if (!emitter) throw new Error('IAPModule emitter not available');
+  // ✅ CORRIGIDO: Retorna um stub ({ remove: () => {} }) em vez de lançar um erro fatal (throw)
+  if (!emitter) return { remove: () => {} }; 
   return emitter.addListener('IAP_purchase_success', cb);
 }
 
 export function onPurchaseFailed(cb: (payload: any) => void) {
-  if (!emitter) throw new Error('IAPModule emitter not available');
+  // ✅ CORRIGIDO: Retorna um stub ({ remove: () => {} }) em vez de lançar um erro fatal (throw)
+  if (!emitter) return { remove: () => {} }; 
   return emitter.addListener('IAP_purchase_failed', cb);
 }
